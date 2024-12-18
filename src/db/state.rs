@@ -6,12 +6,9 @@ pub struct PostgresState {
 }
 
 pub async fn init_postgres() -> PostgresState {
-    // ENV variables
-    const DEFAULT_MAX_POOL_SIZE: u32 = 2;
-
     // Read the pool size from the environment variable
     let max_pool_size: u32 = env_var("POSTGRES_DB_MAX_POOL_SIZE")
-        .unwrap_or(DEFAULT_MAX_POOL_SIZE.to_string())  // Use default if the env variable is not set
+        .unwrap_or("2".to_string()) // Default to 2 if not set
         .parse()
         .expect("POSTGRES_DB_MAX_POOL_SIZE must be a number");
 
@@ -24,7 +21,7 @@ pub async fn init_postgres() -> PostgresState {
         .await
         .expect("Failed to connect to the database");
 
-    dbg!("Connected to the database!");
+    println!("Successfully connected to the database");
 
     PostgresState { db_pool }
 }
