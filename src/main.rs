@@ -1,17 +1,44 @@
-fn main() {
-    println!("Hello, world!");
+use actix_web::{App, HttpServer, HttpResponse, Responder, get};
+use serde::{Deserialize, Serialize};
+use actix_web::web::Data as webData;
+use std::env::var as env_var;
 
-    // PGSQL Connection pool (only 2 pools) and timeout of 10 seconds
+mod db;
 
-    // Endpoints:
-    // /v1/health
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    // Initialize the Postgres state
+    let postgres_state = db::state::init_postgres().await;
+    let postgres_data = webData::new(postgres_state);
 
-    // /v1/pgsql-cluster/status (status of the cluster) [patroni status]  [Later]
-    // /v1/pgsql-cluster/{cluster_id_number}/load (server Load and ram usage and disk usage) [Later]
+    // Start the Actix web server
+    HttpServer::new(move || {
+        App::new()
+            .app_data(postgres_data.clone())
+            .service(health_check)
+            .service(
+                actix_web::web::scope("/postgres") // PostgreSQL endpoints
+                    .service(db::handlers::create_note_handler)
+                    .service(db::handlers::list_notes_handler),
+            )
+    })
+        // .bind(("0.0.0.0", 8686))?
+        .bind(("127.0.0.1", 8686))?
+        .workers(env_var("SERVER_WORKERS_COUNT").unwrap_or("1".to_string()).parse().unwrap())
+    .run()
+    .await
+}
 
-    // /v1/pgsql-cluster/{cluster_id_number}/pools (SHOW POOLS) [pgbouncer]
-    // /v1/pgsql-cluster/{cluster_id_number}/clients (SHOW CLIENTS) [pgbouncer]
-    // /v1/pgsql-cluster/{cluster_id_number}/stats (SHOW STATS) [pgbouncer]
-    // /v1/pgsql-cluster/{cluster_id_number}/databases (SHOW DATABASES) [pgbouncer]
-    // /v1/pgsql-cluster/{cluster_id_number}/users (SHOW USERS) [pgbouncer]
+#[derive(Serialize, Deserialize)]
+struct HealthCheck {
+    status: String,
+}
+
+// Health check endpoint
+#[get("/health_check")]
+async fn health_check() -> impl Responder {
+    let health = HealthCheck {
+        status: "UP".to_string(),
+    };
+    HttpResponse::Ok().json(health)
 }
