@@ -1,0 +1,13 @@
+[package]
+name = "pgsql-monitor-api"
+version = "1.0.0"
+edition = "2021"
+
+
+[dependencies]
+
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
