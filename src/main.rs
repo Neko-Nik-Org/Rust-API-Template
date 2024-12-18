@@ -29,7 +29,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 // Health check endpoint
-#[get("/health_check")]
+#[get("/health")]
 async fn health_check() -> impl Responder {
     HttpResponse::Ok().body("Server is running!")
 }
