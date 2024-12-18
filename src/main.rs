@@ -1,5 +1,4 @@
 use actix_web::{App, HttpServer, HttpResponse, Responder, get};
-use serde::{Deserialize, Serialize};
 use actix_web::web::Data as webData;
 use std::env::var as env_var;
 
@@ -29,16 +28,8 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-#[derive(Serialize, Deserialize)]
-struct HealthCheck {
-    status: String,
-}
-
 // Health check endpoint
 #[get("/health_check")]
 async fn health_check() -> impl Responder {
-    let health = HealthCheck {
-        status: "UP".to_string(),
-    };
-    HttpResponse::Ok().json(health)
+    HttpResponse::Ok().body("Server is running!")
 }
