@@ -1,6 +1,7 @@
-use crate::db::handlers::{Note, add_new_notes, fetch_all_notes};
+use crate::db::pgsql_handlers::{Note, add_new_notes, fetch_all_notes};
 use actix_web::{get, post, web, HttpResponse, Responder};
-use crate::db::state::PostgresState;
+use crate::db::state::{PostgresState, RedisState};
+use crate::db::redis_handler::create_session;
 
 
 #[post("/create-note")]
@@ -20,5 +21,17 @@ pub async fn list_notes_handler(state: web::Data<PostgresState>) -> impl Respond
     match fetch_all_notes(&state.db_pool).await {
         Ok(notes) => HttpResponse::Ok().json(notes),
         Err(_) => HttpResponse::InternalServerError().finish(),
+    }
+}
+
+
+#[post("/create-session")]
+pub async fn create_session_handler(
+    body: String,         // The request body (For now accept anything)
+    state: web::Data<RedisState>, // The state containing the DB pool
+) -> impl Responder {
+    match create_session(&state.redis_pool, body).await {
+        Ok(session_id) => HttpResponse::Ok().json(session_id),
+        Err(err) => HttpResponse::InternalServerError().json(format!("Failed: {}", err)),
     }
 }

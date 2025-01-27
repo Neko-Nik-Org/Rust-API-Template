@@ -8,6 +8,7 @@ services:
       - RUST_LOG=rust_api=TRACE
       - SERVER_WORKERS_COUNT=4
       - POSTGRES_DB_URL=postgres://user:password@db.nekonik.com:5432/nekonik
+      - REDIS_DB_URL=redis://localhost:6379/0
       - POSTGRES_DB_MAX_POOL_SIZE=100
 
     ports:

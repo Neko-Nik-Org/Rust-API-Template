@@ -1,5 +1,5 @@
 use actix_web::{get, web, HttpResponse, Responder};
-use crate::db::handlers::health_check as check_db;
+use crate::db::pgsql_handlers::health_check as check_db;
 use crate::db::state::PostgresState;
 
 
