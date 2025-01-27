@@ -9,7 +9,7 @@ pub struct PostgresState {
 pub async fn init_postgres() -> PostgresState {
     // Read the pool size from the environment variable
     let max_pool_size: u32 = env_var("POSTGRES_DB_MAX_POOL_SIZE")
-        .unwrap_or("2".to_string()) // Default to 2 if not set
+        .unwrap_or("100".to_string()) // Default to 2 if not set
         .parse()
         .expect("POSTGRES_DB_MAX_POOL_SIZE must be a number");
 
