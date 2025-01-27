@@ -6,7 +6,8 @@ mod db;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Initialize the Postgres state
+    // Initializers
+    env_logger::init();
     let postgres_state = db::state::init_postgres().await;
     let postgres_data = webData::new(postgres_state);
 
@@ -17,8 +18,9 @@ async fn main() -> std::io::Result<()> {
             .service(health_check)
             .service(
                 actix_web::web::scope("/postgres") // PostgreSQL endpoints
-                    .service(db::handlers::create_note_handler)
-                    .service(db::handlers::list_notes_handler),
+                .service(db::handlers::create_note_handler)
+                .service(db::handlers::list_notes_handler)
+                .service(db::handlers::db_health_check)
             )
     })
         .bind(("0.0.0.0", 8686))?

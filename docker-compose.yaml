@@ -1,21 +1,16 @@
 services:
   rust-api-template:
-    # The image is available on private docker hub, you can use your own image if you have built it
     image: neko7nik/rust-api-template:latest
     container_name: rust-api-template
 
-    # The environment variables are used to configure the application
-    # Use the correct values for the environment variables
-    # Change the <xxx> to the correct values to reflect your environment
     environment:
       - TZ=Asia/Kolkata
-      - SERVER_WORKERS_COUNT=<Number of workers to be used, normally 2 * number of CPU cores; integer>
-      - POSTGRES_DB_URL=<Postgres database URL; string>
-      - POSTGRES_DB_MAX_POOL_SIZE=<Postgres database password; integer>
+      - RUST_LOG=TRACE
+      - SERVER_WORKERS_COUNT=2
+      - POSTGRES_DB_URL=postgres://user:password@db.nekonik.com:5432/neko
+      - POSTGRES_DB_MAX_POOL_SIZE=10
 
-    # The ports are used to expose the application to the host machine only on localhost:8686
     ports:
       - "127.0.0.1:8686:8686"
 
-    # The restart policy is set to always to restart the container in case of failure
     restart: always
