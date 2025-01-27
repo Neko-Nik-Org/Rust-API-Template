@@ -17,6 +17,24 @@ pub struct Record {
     pub content: String,
 }
 
+
+// Check if DB is workign as expected
+#[get("/health")]
+pub async fn db_health_check(
+    state: web::Data<PostgresState>,
+) -> impl Responder {
+    let result = sqlx::query("SELECT 1")
+        .fetch_one(&state.db_pool)
+        .await
+        .map_err(|err| err.to_string());
+
+    match result {
+        Ok(_) => HttpResponse::Ok().json("Database is healthy!"),
+        Err(err) => HttpResponse::InternalServerError().json(format!("Failed: {}", err)),
+    }
+}
+
+
 // POST /postgres/create-note
 #[post("/create-note")]
 pub async fn create_note_handler(

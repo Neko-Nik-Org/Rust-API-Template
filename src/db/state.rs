@@ -1,5 +1,6 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::env::var as env_var;
+use log::info;
 
 pub struct PostgresState {
     pub db_pool: PgPool,
@@ -21,7 +22,7 @@ pub async fn init_postgres() -> PostgresState {
         .await
         .expect("Failed to connect to the database");
 
-    println!("Successfully connected to the database");
+    info!("Successfully connected to the database");
 
     PostgresState { db_pool }
 }

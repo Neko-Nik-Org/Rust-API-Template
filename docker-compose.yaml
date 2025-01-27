@@ -11,7 +11,7 @@ services:
       - TZ=Asia/Kolkata
       - SERVER_WORKERS_COUNT=<Number of workers to be used, normally 2 * number of CPU cores; integer>
       - POSTGRES_DB_URL=<Postgres database URL; string>
-      - POSTGRES_DB_MAX_POOL_SIZE=<Postgres database password; string>
+      - POSTGRES_DB_MAX_POOL_SIZE=<Postgres database password; integer>
 
     # The ports are used to expose the application to the host machine only on localhost:8686
     ports:

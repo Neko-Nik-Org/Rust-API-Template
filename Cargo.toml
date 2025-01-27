@@ -1,5 +1,5 @@
 [package]
-name = "pgsql-rust-api"
+name = "rust-api"
 version = "1.0.0"
 edition = "2021"
 
@@ -9,9 +9,14 @@ actix-web = "4.9.0"
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+log = "0.4"
 
 
 [profile.release]
-lto = true
+lto = "fat"
 codegen-units = 1
 panic = "abort"
+opt-level = 3
+overflow-checks = true
+debug = false
+strip = true
