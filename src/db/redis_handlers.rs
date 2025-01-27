@@ -36,3 +36,11 @@ pub async fn create_session(redis_pool: &RedisPool<RedisClient>, user_data: Stri
     // Return the session ID
     Ok(session_id)
 }
+
+
+pub async fn health_check(redis_pool: &RedisPool<RedisClient>) -> Result<String, redis::RedisError> {
+    let mut conn: RedisPooledConnection<RedisClient> = redis_pool.get().unwrap();
+    let pong: String = conn.ping()?;
+
+    Ok(pong)
+}

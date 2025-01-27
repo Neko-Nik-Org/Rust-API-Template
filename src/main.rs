@@ -19,6 +19,7 @@ async fn main() -> std::io::Result<()> {
                 actix_scope("/health")
                 .service(health::api_health_check)
                 .service(health::db_health_check)
+                .service(health::redis_health_check)
             )
             .service(
                 actix_web::web::scope("/sample_db")

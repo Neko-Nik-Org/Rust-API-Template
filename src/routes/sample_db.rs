@@ -1,7 +1,7 @@
 use crate::db::pgsql_handlers::{Note, add_new_notes, fetch_all_notes};
 use actix_web::{get, post, web, HttpResponse, Responder};
 use crate::db::state::{PostgresState, RedisState};
-use crate::db::redis_handler::create_session;
+use crate::db::redis_handlers::create_session;
 
 
 #[post("/create-note")]
