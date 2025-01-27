@@ -1,8 +1,8 @@
 services:
-  xxx:
+  rust-api-template:
     # The image is available on private docker hub, you can use your own image if you have built it
-    image: xxx/xxx:latest
-    container_name: xxx
+    image: neko7nik/rust-api-template:latest
+    container_name: rust-api-template
 
     # The environment variables are used to configure the application
     # Use the correct values for the environment variables
@@ -12,7 +12,6 @@ services:
       - SERVER_WORKERS_COUNT=<Number of workers to be used, normally 2 * number of CPU cores; integer>
       - POSTGRES_DB_URL=<Postgres database URL; string>
       - POSTGRES_DB_MAX_POOL_SIZE=<Postgres database password; string>
-
 
     # The ports are used to expose the application to the host machine only on localhost:8686
     ports:
