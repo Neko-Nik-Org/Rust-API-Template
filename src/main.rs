@@ -2,6 +2,7 @@ use actix_web::web::scope as actix_scope;
 use actix_web::{App, HttpServer};
 use std::env::var as env_var;
 use routes::sample_db;
+use actix_cors::Cors;
 use routes::health;
 
 mod routes;
@@ -15,6 +16,12 @@ async fn main() -> std::io::Result<()> {
     // Start the Actix web server
     HttpServer::new(move || {
         App::new().app_data(postgres_data.clone()).app_data(redis_data.clone())
+            .wrap(Cors::default()
+                .allow_any_origin()
+                .allowed_methods(vec!["GET", "POST"])
+                .allow_any_header()
+                .max_age(120)
+            )
             .service(
                 actix_scope("/health")
                 .service(health::api_health_check)
