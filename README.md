@@ -4,22 +4,31 @@ Still working on this, needs lots of improvements.
 
 ## TODO
 
-- [ ] Fix or handle the DB properly and do DB handler in db::handler but Move the API endpoint to a new folder and file like my fast api template
-- [ ] Integrate with a proper logger
-- [ ] Add a Redis cache layer
 - [ ] Add a rate limiter
-- [ ] Setup a proper CI/CD pipeline
+- [ ] Add a session manager or API Key manager (for authentication)
+- [ ] Add a simple cache manager decorator like python's `@cache(expire=60)` for functions how? not sure yet
+
 
 ## How to run for development
 
-TODO
-
-
+1. Clone the repository
+2. Run a simple test Postgres container with `docker run --name postgres_temp_db -e POSTGRES_PASSWORD=postgres -d -p 5432:5432 postgres`
+3. Run a simple Redis container with `docker run --name redis_temp_db -d -p 6379:6379 redis`
+4. Export the following environment variables using `export` or by creating a `.env` file:
+    - `RUST_LOG=rust_api=TRACE`
+    - `SERVER_WORKERS_COUNT=4`
+    - `POSTGRES_DB_URL=postgres://postgres:postgres@localhost:5432/postgres`
+    - `REDIS_DB_URL=redis://localhost:6379/0`
+    - `REDIS_DB_MAX_POOL_SIZE=50`
+    - `POSTGRES_DB_MAX_POOL_SIZE=100`
+5. Run the application with `cargo run` to start the server on all interfaces on port 8686
+6. Access the API at `http://localhost:8686` or public IP of the server on port 8686 and its endpoints
+7. After you are done, stop and remove the containers with `docker stop postgres_temp_db redis_temp_db && docker rm postgres_temp_db redis_temp_db`
 
 
 ## Deployment
 
-For production deployment, the template provides docker CI pipeline and `docker-compose` configuration files for easy deployment.
+For production deployment, the template provides docker CI pipeline and `docker-compose` configuration files for easy deployment. And use the docker compose file to deploy the application.
 
 ## Contributing
 
