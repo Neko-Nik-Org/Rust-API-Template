@@ -54,10 +54,14 @@ async fn init_postgres() -> PostgresState {
 async fn init_redis() -> RedisState {
     // Create the Redis client
     let redis_url = env_var("REDIS_DB_URL").expect("REDIS_DB_URL must be set");
+    let max_pool_size: u32 = env_var("REDIS_DB_MAX_POOL_SIZE")
+        .unwrap_or("50".to_string()) // Default to 50 if not set
+        .parse()
+        .expect("REDIS_DB_MAX_POOL_SIZE must be a number");
     let redis_client = RedisClient::open(redis_url).unwrap();
 
     let pool = RedisPool::builder()
-        .max_size(15)
+        .max_size(max_pool_size)
         .build(redis_client)
         .unwrap();
     
