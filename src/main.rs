@@ -29,7 +29,8 @@ async fn main() -> std::io::Result<()> {
                 .service(health::redis_health_check)
             )
             .service(
-                actix_web::web::scope("/sample_db")
+                actix_scope("/sample_db")
+                // .guard() ? what is it?
                 .service(sample_db::create_note_handler)
                 .service(sample_db::list_notes_handler)
                 .service(sample_db::create_session_handler)
