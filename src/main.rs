@@ -43,9 +43,3 @@ async fn main() -> std::io::Result<()> {
     .workers(env_var("API_WORKERS_COUNT").unwrap_or("4".to_string()).parse().unwrap())
     .run().await
 }
-
-
-// To Run
-// export RUST_LOG=rust_api=TRACE
-// export POSTGRES_DB_URL=postgres://postgres:cJuyabQXU6Lt9JhToKMWnwSAvGcpv8Qu@65.108.61.34:6432/testdb
-// cargo run
