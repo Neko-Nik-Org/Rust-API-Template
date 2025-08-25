@@ -7,6 +7,8 @@ pub type AppCache = Cache<Key, Value>;
 
 
 /// Create a cache key from a string-like value
-pub fn make_key<S: Into<Value>>(s: S) -> Key {
+pub fn make_key<S>(s: S) -> Key
+    where S: Into<Value>
+{
     Arc::<str>::from(s.into())
 }
