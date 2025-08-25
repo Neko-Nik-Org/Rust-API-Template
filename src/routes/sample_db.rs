@@ -35,7 +35,7 @@ pub async fn create_session_handler(
 
     state.insert(make_key(session_id.clone()), body.clone()).await;
 
-    HttpResponse::Ok().json(session_id)
+    HttpResponse::Ok().body(session_id)
 }
 
 
@@ -49,7 +49,7 @@ pub async fn get_session_handler(
     if let Some(value) = state.get(&key).await {
         HttpResponse::Ok()
             .insert_header(("Cache-Control", "cache"))
-            .json(value)
+            .body(value)
     } else {
         HttpResponse::NotFound().finish()
     }
