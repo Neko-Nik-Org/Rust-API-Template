@@ -3,12 +3,12 @@ name: Docker Image CI - Build
 on:
   push:
     branches:
-      - "main"
+      - "*"
     tags:
       - "*"
   pull_request:
     branches:
-      - main
+      - "*"
 
 jobs:
   docker:
@@ -35,7 +35,11 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           push: true
+          sbom: true
+          provenance: true
           tags: |
             neko7nik/rust-api-template:latest
             neko7nik/rust-api-template:${{ steps.tag.outputs.TAG }}
