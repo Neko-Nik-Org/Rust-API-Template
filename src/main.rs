@@ -13,12 +13,12 @@ mod db;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let (postgres_data, in_mem_cache) = state::init().await;
+    let (pg_pool, in_mem_cache) = state::init().await;
 
     // Start the Actix web server
     HttpServer::new(move || {
         App::new()
-            .app_data(postgres_data.clone())
+            .app_data(pg_pool.clone())
             .app_data(in_mem_cache.clone())
             .wrap(Cors::default()
                 .allow_any_origin()
