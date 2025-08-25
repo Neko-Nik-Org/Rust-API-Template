@@ -1,4 +1,4 @@
-FROM rust:1.83.0-bookworm AS build
+FROM rust:1.89.0-bookworm AS build
 
 WORKDIR /app
 
@@ -6,7 +6,7 @@ COPY . .
 
 RUN cargo build --release
 
-FROM debian:12-slim
+FROM debian:13-slim
 
 RUN apt-get update
 
