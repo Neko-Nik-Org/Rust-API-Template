@@ -11,7 +11,7 @@ pub async fn create_note_handler(
 ) -> impl Responder {
     match add_new_notes(&state, vec![body.into_inner()]).await {
         Ok(_) => HttpResponse::Ok().json("Note created successfully!"),
-        Err(err) => HttpResponse::InternalServerError().json(format!("Failed: {}", err)),
+        Err(err) => HttpResponse::ExpectationFailed().json(format!("Failed: {}", err)),
     }
 }
 
@@ -20,7 +20,7 @@ pub async fn create_note_handler(
 pub async fn list_notes_handler(state: web::Data<PgPool>) -> impl Responder {
     match fetch_all_notes(&state).await {
         Ok(notes) => HttpResponse::Ok().json(notes),
-        Err(_) => HttpResponse::InternalServerError().finish(),
+        Err(_) => HttpResponse::ExpectationFailed().finish(),
     }
 }
 
