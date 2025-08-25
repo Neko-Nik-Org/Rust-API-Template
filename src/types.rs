@@ -1,0 +1,12 @@
+use moka::future::Cache;
+use std::sync::Arc;
+
+pub type Key = Arc<str>;
+pub type Value = String;
+pub type AppCache = Cache<Key, Value>;
+
+
+/// Create a cache key from a string-like value
+pub fn make_key<S: Into<Value>>(s: S) -> Key {
+    Arc::<str>::from(s.into())
+}

@@ -1,15 +1,15 @@
 use crate::db::pgsql_handlers::{Note, add_new_notes, fetch_all_notes};
 use actix_web::{get, post, web, HttpResponse, Responder};
-use crate::db::state::{PostgresState, RedisState};
-use crate::db::redis_handlers::create_session;
+use crate::types::{AppCache, make_key};
+use sqlx::PgPool;
 
 
 #[post("/create-note")]
 pub async fn create_note_handler(
     body: web::Json<Note>,         // The request body
-    state: web::Data<PostgresState>, // The state containing the DB pool
+    state: web::Data<PgPool>, // The state containing the DB pool
 ) -> impl Responder {
-    match add_new_notes(&state.db_pool, vec![body.into_inner()]).await {
+    match add_new_notes(&state, vec![body.into_inner()]).await {
         Ok(_) => HttpResponse::Ok().json("Note created successfully!"),
         Err(err) => HttpResponse::InternalServerError().json(format!("Failed: {}", err)),
     }
@@ -17,8 +17,8 @@ pub async fn create_note_handler(
 
 
 #[get("/notes")]
-pub async fn list_notes_handler(state: web::Data<PostgresState>) -> impl Responder {
-    match fetch_all_notes(&state.db_pool).await {
+pub async fn list_notes_handler(state: web::Data<PgPool>) -> impl Responder {
+    match fetch_all_notes(&state).await {
         Ok(notes) => HttpResponse::Ok().json(notes),
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
@@ -28,10 +28,29 @@ pub async fn list_notes_handler(state: web::Data<PostgresState>) -> impl Respond
 #[post("/create-session")]
 pub async fn create_session_handler(
     body: String,         // The request body (For now accept anything)
-    state: web::Data<RedisState>, // The state containing the DB pool
+    state: web::Data<AppCache>, // The state containing the Cache
 ) -> impl Responder {
-    match create_session(&state.redis_pool, body).await {
-        Ok(session_id) => HttpResponse::Ok().json(session_id),
-        Err(err) => HttpResponse::InternalServerError().json(format!("Failed: {}", err)),
+    // Generate a new session ID
+    let session_id = uuid::Uuid::new_v4().to_string();
+
+    state.insert(make_key(session_id.clone()), body.clone()).await;
+
+    HttpResponse::Ok().json(session_id)
+}
+
+
+#[get("/get-session/{session_id}")]
+pub async fn get_session_handler(
+    session_id: web::Path<String>,
+    state: web::Data<AppCache>,
+) -> impl Responder {
+    let key = make_key(session_id.clone());
+
+    if let Some(value) = state.get(&key).await {
+        HttpResponse::Ok()
+            .insert_header(("Cache-Control", "cache"))
+            .json(value)
+    } else {
+        HttpResponse::NotFound().finish()
     }
 }
