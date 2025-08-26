@@ -62,6 +62,6 @@ pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
     // Initialize the in-memory cache (Moka)
     let in_mem_cache = init_cache();
 
-    // web::Data::new(cache)
+    // Wrap the state of the application and share it
     (webData::new(postgres_state), webData::new(in_mem_cache))
 }
