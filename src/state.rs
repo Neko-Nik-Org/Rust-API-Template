@@ -1,5 +1,7 @@
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use deadpool_postgres::{Manager, RecyclingMethod, Pool as PgPool};
 use actix_web::web::Data as webData;
+use tokio_postgres::{Config, NoTls};
+use deadpool::{managed::Timeouts, Runtime};
 use std::env::var as env_var;
 use super::types::AppCache;
 use std::time::Duration;
@@ -7,25 +9,49 @@ use actix_web::web;
 use log::info;
 
 
-async fn init_postgres() -> PgPool {
-    // Read the pool size from the environment variable
-    let max_pool_size: u32 = env_var("POSTGRES_DB_MAX_POOL_SIZE")
-        .unwrap_or("100".to_string()) // Default to 2 if not set
-        .parse()
-        .expect("POSTGRES_DB_MAX_POOL_SIZE must be a number");
+fn build_pg_config() -> Config {
+    let url = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
 
-    // Create the pool using PgPoolOptions and set the max pool size
-    let db_url = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
+    let mut cfg: Config = url.parse::<Config>().expect("invalid POSTGRES_DB_URL");
+    cfg.application_name("rust-api");
+    cfg.connect_timeout(Duration::from_secs(5));
 
-    let db_pool = PgPoolOptions::new()
-        .max_connections(max_pool_size)  // Set the pool size here
-        .connect(&db_url)
-        .await
-        .expect("Failed to connect to the database");
+    cfg
+}
 
-    info!("Successfully connected to the database");
 
-    db_pool
+fn init_pg_pool() -> PgPool {
+    let cfg: Config = build_pg_config();
+
+    let mgr = Manager::from_config(
+        cfg,
+        NoTls,
+        deadpool_postgres::ManagerConfig {
+            recycling_method: RecyclingMethod::Fast,
+        },
+    );
+
+    let max = env_var("PG_POOL_MAX")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(32);
+
+    let pool = PgPool::builder(mgr)
+        .max_size(max)
+        .runtime(Runtime::Tokio1)
+        .timeouts(Timeouts {
+            // how long to wait for an idle connection from the pool
+            wait: Some(Duration::from_secs(5)),
+            // how long to spend creating a new connection (if pool can grow)
+            create: Some(Duration::from_secs(5)),
+            // how long to spend recycling/validating a connection
+            recycle: Some(Duration::from_secs(5)),
+        })
+        .build()
+        .expect("failed to build pg pool");
+
+    info!("Postgres pool initialized (max_size={max})");
+    pool
 }
 
 
@@ -57,7 +83,7 @@ pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
     env_logger::init(); // Initialize the logger to log all the logs
 
     // Initialize the Postgres client
-    let postgres_state = init_postgres().await;
+    let postgres_state = init_pg_pool();
 
     // Initialize the in-memory cache (Moka)
     let in_mem_cache = init_cache();

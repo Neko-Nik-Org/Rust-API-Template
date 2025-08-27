@@ -1,7 +1,7 @@
 use actix_web::web::scope as actix_scope;
 use actix_web::{App, HttpServer};
 use std::env::var as env_var;
-use routes::sample_db;
+// use routes::sample_db;
 use actix_cors::Cors;
 use routes::health;
 
@@ -31,13 +31,13 @@ async fn main() -> std::io::Result<()> {
                 .service(health::api_health_check)
                 .service(health::db_health_check)
             )
-            .service(
-                actix_scope("/sample_db")
-                .service(sample_db::create_note_handler)
-                .service(sample_db::list_notes_handler)
-                .service(sample_db::create_session_handler)
-                .service(sample_db::get_session_handler)
-            )
+            // .service(
+            //     actix_scope("/sample_db")
+            //     .service(sample_db::create_note_handler)
+            //     .service(sample_db::list_notes_handler)
+            //     .service(sample_db::create_session_handler)
+            //     .service(sample_db::get_session_handler)
+            // )
     })
     .bind(("0.0.0.0", 8686))?
     .workers(env_var("API_WORKERS_COUNT").unwrap_or("4".to_string()).parse().unwrap())

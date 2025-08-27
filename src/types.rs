@@ -1,8 +1,10 @@
 use moka::future::Cache;
 use std::sync::Arc;
 
-pub type Key = Arc<str>;
-pub type Value = String;
+
+// Cache key and value types
+type Key = Arc<str>;
+type Value = String;
 pub type AppCache = Cache<Key, Value>;
 
 
