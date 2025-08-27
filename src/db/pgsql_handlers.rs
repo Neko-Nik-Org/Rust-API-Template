@@ -53,7 +53,10 @@ pub async fn add_new_notes(db_pool: &PgPool, values: Vec<Note>) -> Result<(), Pg
     for note in values {
         // We can do like this to purely put the query in one function and call it in another function
         // We can even do some processing before calling the query (but all db related stuff should be in db module only)
-        create_single_note(db_pool, note).await?;
+        let pool = db_pool.clone(); // We can even clone the pool and spawn it to be fully parallel
+        tokio::spawn(async move {
+            let _ = create_single_note(&pool, note).await;
+        });
     }
 
     Ok(())
