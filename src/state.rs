@@ -13,7 +13,7 @@ struct PgSettings {
     url: String,
     conn_timeout: u64,
     max_pool_size: usize,
-    idle_timeout: u64,
+    wait_timeout: u64,
     new_connection_timeout: u64,
     recycle_timeout: u64,
 }
@@ -48,10 +48,10 @@ impl FromEnv for PgSettings {
             .ok()
             .and_then(|s| s.parse().ok())
             .expect("PG_POOL_MAX_SIZE must be a positive integer of type usize");
-        let idle_timeout = env_var("PG_POOL_IDLE_TIMEOUT")
+        let wait_timeout = env_var("PG_POOL_WAIT_TIMEOUT")
             .ok()
             .and_then(|s| s.parse().ok())
-            .expect("PG_POOL_IDLE_TIMEOUT must be a positive integer of type u64");
+            .expect("PG_POOL_WAIT_TIMEOUT must be a positive integer of type u64");
         let new_connection_timeout = env_var("PG_POOL_NEW_CONNECTION_TIMEOUT")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -65,7 +65,7 @@ impl FromEnv for PgSettings {
             url,
             conn_timeout,
             max_pool_size,
-            idle_timeout,
+            wait_timeout,
             new_connection_timeout,
             recycle_timeout,
         }
@@ -136,7 +136,7 @@ fn init_pg_pool(pg_settings: &PgSettings) -> PgPool {
         .runtime(Runtime::Tokio1)
         .timeouts(Timeouts {
             // how long to wait for an idle connection from the pool
-            wait: Some(Duration::from_secs(pg_settings.idle_timeout)),
+            wait: Some(Duration::from_secs(pg_settings.wait_timeout)),
             // how long to spend creating a new connection (if pool can grow)
             create: Some(Duration::from_secs(pg_settings.new_connection_timeout)),
             // how long to spend recycling/validating a connection
