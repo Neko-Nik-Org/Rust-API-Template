@@ -42,10 +42,10 @@ trait FromEnv {
 impl FromEnv for PgSettings {
     fn from_env() -> Self {
         let url = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
-        let conn_timeout = env_var("POSTGRES_CONN_TIMEOUT")
+        let conn_timeout = env_var("PG_CONN_TIMEOUT")
             .ok()
             .and_then(|s| s.parse().ok())
-            .expect("POSTGRES_CONN_TIMEOUT must be a positive integer of type u64");
+            .expect("PG_CONN_TIMEOUT must be a positive integer of type u64");
         let max_pool_size = env_var("PG_POOL_MAX_SIZE")
             .ok()
             .and_then(|s| s.parse().ok())
