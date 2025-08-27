@@ -5,8 +5,8 @@ use tokio_postgres::{Config, NoTls};
 use std::env::var as env_var;
 use super::types::AppCache;
 use std::time::Duration;
+use log::{info, warn};
 use actix_web::web;
-use log::info;
 
 
 struct PgSettings {
@@ -16,6 +16,8 @@ struct PgSettings {
     wait_timeout: u64,
     new_connection_timeout: u64,
     recycle_timeout: u64,
+    warm_pool: bool,
+    warm_pool_size: usize,
 }
 
 
@@ -60,6 +62,21 @@ impl FromEnv for PgSettings {
             .ok()
             .and_then(|s| s.parse().ok())
             .expect("PG_POOL_RECYCLE_TIMEOUT must be a positive integer of type u64");
+        let warm_pool = env_var("PG_POOL_WARM_POOL").expect("PG_POOL_WARM_POOL must be set as true or false");
+        let warm_pool = match warm_pool.to_lowercase().as_str() {
+            "true" => true,
+            "false" => false,
+            _ => panic!("PG_POOL_WARM_POOL must be set as true or false"),
+        };
+        let warm_pool_size = env_var("PG_POOL_WARM_POOL_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("PG_POOL_WARM_POOL_SIZE must be a positive integer of type usize");
+
+        // Warm pool size can not go above 128 (if warm pool is enabled)
+        if warm_pool && warm_pool_size > 128 {
+            panic!("PG_POOL_WARM_POOL_SIZE must be at most 128, and the optimal size is 64");
+        }
 
         PgSettings {
             url,
@@ -68,6 +85,8 @@ impl FromEnv for PgSettings {
             wait_timeout,
             new_connection_timeout,
             recycle_timeout,
+            warm_pool,
+            warm_pool_size,
         }
     }
 }
@@ -106,6 +125,37 @@ impl FromEnv for AppSettings {
             cache_settings: MokaSettings::from_env(),
             enable_logging,
         }
+    }
+}
+
+
+async fn warm_pool(pool: &PgPool, pg: &PgSettings) {
+    // Warm pool to avoid first-hit latency
+    if !pg.warm_pool {
+        // Return early if warm pool is not enabled
+        return;
+    }
+
+    let warm_n = pg.max_pool_size.min(pg.warm_pool_size);
+    let mut ok = 0;
+
+    for _ in 0..warm_n {
+        match pool.get().await {
+            Ok(client) => {
+                let _ = client.simple_query("SELECT 1").await;
+                ok += 1;
+            }
+            Err(_) => {
+                warn!("Pool warm-up: failed to get a connection");
+            }
+        }
+    }
+
+    // Log the warm-up results
+    if ok == 0 {
+        warn!("Pool warm-up failed, all attempts to get a connection were unsuccessful: {warm_n}");
+    } else {
+        info!("Pool warm-up: {ok} conns warmed up out of {warm_n}. Success rate: {:.2}%", ok as f64 / warm_n as f64 * 100.0);
     }
 }
 
@@ -164,7 +214,7 @@ fn init_cache(cache_settings: &MokaSettings) -> AppCache {
 
 pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
     // Preparing to start the server by collecting environment variables
-    let app_settings = AppSettings::from_env();
+    let app_settings: AppSettings = AppSettings::from_env();
 
     if app_settings.enable_logging {
         env_logger::init(); // Initialize the logger to log all the logs
@@ -173,6 +223,9 @@ pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
 
     // Initialize the Postgres client
     let postgres_state = init_pg_pool(&app_settings.pg_settings);
+
+    // Warm up the connection pool if enabled
+    warm_pool(&postgres_state, &app_settings.pg_settings).await;
 
     // Initialize the in-memory cache (Moka)
     let in_mem_cache = init_cache(&app_settings.cache_settings);
