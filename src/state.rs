@@ -1,66 +1,237 @@
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use deadpool_postgres::{Manager, RecyclingMethod, Pool as PgPool};
+use deadpool::{managed::Timeouts, Runtime};
 use actix_web::web::Data as webData;
+use tokio_postgres::{Config, NoTls};
 use std::env::var as env_var;
 use super::types::AppCache;
 use std::time::Duration;
+use log::{info, warn};
 use actix_web::web;
-use log::info;
 
 
-async fn init_postgres() -> PgPool {
-    // Read the pool size from the environment variable
-    let max_pool_size: u32 = env_var("POSTGRES_DB_MAX_POOL_SIZE")
-        .unwrap_or("100".to_string()) // Default to 2 if not set
-        .parse()
-        .expect("POSTGRES_DB_MAX_POOL_SIZE must be a number");
-
-    // Create the pool using PgPoolOptions and set the max pool size
-    let db_url = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
-
-    let db_pool = PgPoolOptions::new()
-        .max_connections(max_pool_size)  // Set the pool size here
-        .connect(&db_url)
-        .await
-        .expect("Failed to connect to the database");
-
-    info!("Successfully connected to the database");
-
-    db_pool
+struct PgSettings {
+    url: String,
+    conn_timeout: u64,
+    max_pool_size: usize,
+    wait_timeout: u64,
+    new_connection_timeout: u64,
+    recycle_timeout: u64,
+    warm_pool: bool,
+    warm_pool_size: usize,
 }
 
 
-fn init_cache() -> AppCache {
-    // Get the max capacity from the environment variable
-    let max_capacity: u64 = env_var("CACHE_MAX_CAPACITY")
-        .unwrap_or("100_000".to_string())
-        .parse()
-        .expect("CACHE_MAX_CAPACITY must be a number");
+struct MokaSettings {
+    cache_size: u64,
+    expiration_time: Duration,
+}
 
-    // Max Cache TTL, get from the environment variable
-    let time_to_live: u64 = env_var("CACHE_TIME_TO_LIVE")
-        .unwrap_or("300".to_string())
-        .parse()
-        .expect("CACHE_TIME_TO_LIVE must be a number");
 
+struct AppSettings {
+    pg_settings: PgSettings,
+    cache_settings: MokaSettings,
+    enable_logging: bool,
+}
+
+
+trait FromEnv {
+    fn from_env() -> Self;
+}
+
+
+impl FromEnv for PgSettings {
+    fn from_env() -> Self {
+        let url = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
+        let conn_timeout = env_var("POSTGRES_CONN_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("POSTGRES_CONN_TIMEOUT must be a positive integer of type u64");
+        let max_pool_size = env_var("PG_POOL_MAX_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("PG_POOL_MAX_SIZE must be a positive integer of type usize");
+        let wait_timeout = env_var("PG_POOL_WAIT_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("PG_POOL_WAIT_TIMEOUT must be a positive integer of type u64");
+        let new_connection_timeout = env_var("PG_POOL_NEW_CONNECTION_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("PG_POOL_NEW_CONNECTION_TIMEOUT must be a positive integer of type u64");
+        let recycle_timeout = env_var("PG_POOL_RECYCLE_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("PG_POOL_RECYCLE_TIMEOUT must be a positive integer of type u64");
+        let warm_pool = env_var("PG_POOL_WARM_POOL").expect("PG_POOL_WARM_POOL must be set as true or false");
+        let warm_pool = match warm_pool.to_lowercase().as_str() {
+            "true" => true,
+            "false" => false,
+            _ => panic!("PG_POOL_WARM_POOL must be set as true or false"),
+        };
+        let warm_pool_size = env_var("PG_POOL_WARM_POOL_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("PG_POOL_WARM_POOL_SIZE must be a positive integer of type usize");
+
+        // Warm pool size can not go above 128 (if warm pool is enabled)
+        if warm_pool_size > max_pool_size {
+            panic!("PG_POOL_WARM_POOL_SIZE must be at most PG_POOL_MAX_SIZE, it can not go more than {}", max_pool_size);
+        }
+        if warm_pool && warm_pool_size > 128 {
+            panic!("PG_POOL_WARM_POOL_SIZE must be at most 128, and the optimal size is 64");
+        }
+
+        PgSettings {
+            url,
+            conn_timeout,
+            max_pool_size,
+            wait_timeout,
+            new_connection_timeout,
+            recycle_timeout,
+            warm_pool,
+            warm_pool_size,
+        }
+    }
+}
+
+
+impl FromEnv for MokaSettings {
+    fn from_env() -> Self {
+        let cache_size = env_var("CACHE_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("CACHE_SIZE must be a positive integer of type u64");
+        let expiration_time = env_var("CACHE_EXPIRATION_TIME")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .expect("CACHE_EXPIRATION_TIME must be a positive integer of type u64");
+
+        MokaSettings {
+            cache_size,
+            expiration_time: Duration::from_secs(expiration_time),
+        }
+    }
+}
+
+
+impl FromEnv for AppSettings {
+    fn from_env() -> Self {
+        let enable_logging = env_var("ENABLE_LOGGING").expect("ENABLE_LOGGING must be set as true or false");
+        let enable_logging = match enable_logging.to_lowercase().as_str() {
+            "true" => true,
+            "false" => false,
+            _ => panic!("ENABLE_LOGGING must be set as true or false"),
+        };
+
+        AppSettings {
+            pg_settings: PgSettings::from_env(),
+            cache_settings: MokaSettings::from_env(),
+            enable_logging,
+        }
+    }
+}
+
+
+async fn warm_pool(pool: &PgPool, pg: &PgSettings) {
+    // Warm pool to avoid first-hit latency
+    if !pg.warm_pool {
+        // Return early if warm pool is not enabled
+        return;
+    }
+
+    let warm_n = pg.max_pool_size.min(pg.warm_pool_size);
+    let mut ok = 0;
+
+    for _ in 0..warm_n {
+        match pool.get().await {
+            Ok(client) => {
+                let _ = client.simple_query("SELECT 1").await;
+                ok += 1;
+            }
+            Err(_) => {
+                warn!("Pool warm-up: failed to get a connection");
+            }
+        }
+    }
+
+    // Log the warm-up results
+    if ok == 0 {
+        warn!("Pool warm-up failed, all attempts to get a connection were unsuccessful: {warm_n}");
+    } else {
+        info!("Pool warm-up: {ok} conns warmed up out of {warm_n}. Success rate: {:.2}%", ok as f64 / warm_n as f64 * 100.0);
+    }
+}
+
+
+fn build_pg_config(settings: &PgSettings) -> Config {
+    // Initialize the Postgres configuration
+    let mut cfg: Config = settings.url.parse::<Config>().expect("invalid POSTGRES_DB_URL");
+    cfg.application_name("rust-api");
+    cfg.connect_timeout(Duration::from_secs(settings.conn_timeout));
+
+    cfg
+}
+
+
+fn init_pg_pool(pg_settings: &PgSettings) -> PgPool {
+    // Get the Postgres base configuration
+    let cfg: Config = build_pg_config(pg_settings);
+    let mgr = Manager::from_config(
+        cfg,
+        NoTls,
+        deadpool_postgres::ManagerConfig {
+            recycling_method: RecyclingMethod::Fast,
+        },
+    );
+
+    let pool = PgPool::builder(mgr)
+        .max_size(pg_settings.max_pool_size)
+        .runtime(Runtime::Tokio1)
+        .timeouts(Timeouts {
+            // how long to wait for an idle connection from the pool
+            wait: Some(Duration::from_secs(pg_settings.wait_timeout)),
+            // how long to spend creating a new connection (if pool can grow)
+            create: Some(Duration::from_secs(pg_settings.new_connection_timeout)),
+            // how long to spend recycling/validating a connection
+            recycle: Some(Duration::from_secs(pg_settings.recycle_timeout)),
+        })
+        .build()
+        .expect("failed to build pg pool");
+
+    info!("Postgres pool initialized (max_pool_size={})", pg_settings.max_pool_size);
+    pool
+}
+
+
+fn init_cache(cache_settings: &MokaSettings) -> AppCache {
     // Build the AppCache
     let cache: AppCache = AppCache::builder()
-        .max_capacity(max_capacity)
-        .time_to_live(Duration::from_secs(time_to_live))
+        .max_capacity(cache_settings.cache_size)
+        .time_to_live(cache_settings.expiration_time)
         .build();
 
+    info!("In-memory cache initialized (max_capacity={})", cache_settings.cache_size);
     cache
 }
 
+
 pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
-    info!("Starting the server by initializing the logger and the in-memory cache");
-    // Initializers for the logger and the database
-    env_logger::init(); // Initialize the logger to log all the logs
+    // Preparing to start the server by collecting environment variables
+    let app_settings: AppSettings = AppSettings::from_env();
+
+    if app_settings.enable_logging {
+        let _ = env_logger::try_init(); // Initialize the logger to log all the logs
+        info!("Starting the server by initializing the application state");
+    }
 
     // Initialize the Postgres client
-    let postgres_state = init_postgres().await;
+    let postgres_state = init_pg_pool(&app_settings.pg_settings);
+
+    // Warm up the connection pool if enabled
+    warm_pool(&postgres_state, &app_settings.pg_settings).await;
 
     // Initialize the in-memory cache (Moka)
-    let in_mem_cache = init_cache();
+    let in_mem_cache = init_cache(&app_settings.cache_settings);
 
     // Wrap the state of the application and share it
     (webData::new(postgres_state), webData::new(in_mem_cache))

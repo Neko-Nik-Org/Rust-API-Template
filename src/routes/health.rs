@@ -1,6 +1,6 @@
-use crate::db::pgsql_handlers::health_check as check_db;
+use crate::db::pgsql_handlers::health_check as health_check_pgsql;
 use actix_web::{get, web, HttpResponse, Responder};
-use sqlx::PgPool;
+use deadpool_postgres::Pool as PgPool;
 
 
 // Health check endpoint
@@ -13,7 +13,7 @@ async fn api_health_check() -> impl Responder {
 // Database health check
 #[get("/pgsql")]
 async fn db_health_check(state: web::Data<PgPool>) -> impl Responder {
-    match check_db(&state).await {
+    match health_check_pgsql(&state).await {
         Ok(_) => HttpResponse::Ok().body("Database is running!"),
         Err(err) => HttpResponse::InternalServerError().json(format!("Failed: {}", err)),
     }
