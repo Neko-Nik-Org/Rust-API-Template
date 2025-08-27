@@ -10,19 +10,41 @@ use log::info;
 
 
 fn build_pg_config() -> Config {
-    let url = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
+    let url: String = env_var("POSTGRES_DB_URL").expect("POSTGRES_DB_URL must be set");
+    let conn_timeout: u64 = env_var("POSTGRES_CONN_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .expect("POSTGRES_CONN_TIMEOUT must be a positive integer of type u64");
 
+    // Initialize the Postgres configuration
     let mut cfg: Config = url.parse::<Config>().expect("invalid POSTGRES_DB_URL");
     cfg.application_name("rust-api");
-    cfg.connect_timeout(Duration::from_secs(5));
+    cfg.connect_timeout(Duration::from_secs(conn_timeout));
 
     cfg
 }
 
 
 fn init_pg_pool() -> PgPool {
-    let cfg: Config = build_pg_config();
+    let max_pool_size: usize = env_var("PG_POOL_MAX_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .expect("PG_POOL_MAX_SIZE must be a positive integer of type usize");
+    let idle_timeout: u64 = env_var("PG_POOL_IDLE_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .expect("PG_POOL_IDLE_TIMEOUT must be a positive integer of type u64");
+    let new_connection_timeout: u64 = env_var("PG_POOL_NEW_CONNECTION_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .expect("PG_POOL_NEW_CONNECTION_TIMEOUT must be a positive integer of type u64");
+    let recycle_timeout: u64 = env_var("PG_POOL_RECYCLE_TIMEOUT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .expect("PG_POOL_RECYCLE_TIMEOUT must be a positive integer of type u64");
 
+    // Get the Postgres base configuration
+    let cfg: Config = build_pg_config();
     let mgr = Manager::from_config(
         cfg,
         NoTls,
@@ -31,26 +53,21 @@ fn init_pg_pool() -> PgPool {
         },
     );
 
-    let max = env_var("PG_POOL_MAX")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(64);
-
     let pool = PgPool::builder(mgr)
-        .max_size(max)
+        .max_size(max_pool_size)
         .runtime(Runtime::Tokio1)
         .timeouts(Timeouts {
             // how long to wait for an idle connection from the pool
-            wait: Some(Duration::from_secs(5)),
+            wait: Some(Duration::from_secs(idle_timeout)),
             // how long to spend creating a new connection (if pool can grow)
-            create: Some(Duration::from_secs(5)),
+            create: Some(Duration::from_secs(new_connection_timeout)),
             // how long to spend recycling/validating a connection
-            recycle: Some(Duration::from_secs(5)),
+            recycle: Some(Duration::from_secs(recycle_timeout)),
         })
         .build()
         .expect("failed to build pg pool");
 
-    info!("Postgres pool initialized (max_size={max})");
+    info!("Postgres pool initialized (max_size={max_pool_size})");
     pool
 }
 
