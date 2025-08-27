@@ -1,22 +1,11 @@
 use crate::db::pgsql_handlers::{Note, add_new_notes, fetch_all_notes};
 use actix_web::{get, post, web, HttpResponse, Responder};
-use crate::types::{AppCache, make_key};
+use crate::types::{AppCache, make_key, cache_data};
 use deadpool_postgres::Pool as PgPool;
 
 // Note: No need to spawn to add the cache, just call the function directly (Tested by Neko Nik)
 // There differences are tiny (~0.5–1% variation), so why do all the clone and stuff
 
-async fn cache_data<T, S>(key: S, value: &T, cache: &AppCache)
-    where
-        T: serde::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static,
-        S: Into<String>
-{
-    // Serialize the value to a JSON string
-    let json = serde_json::to_string(value).unwrap();
-
-    // Insert the JSON string into the cache
-    cache.insert(make_key(key), json).await;
-}
 
 #[post("/create-note")]
 pub async fn create_note_handler(

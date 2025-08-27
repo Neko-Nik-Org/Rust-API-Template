@@ -14,3 +14,20 @@ pub fn make_key<S>(s: S) -> Key
 {
     Arc::<str>::from(s.into())
 }
+
+
+/// Cache data into the cache
+pub async fn cache_data<T, S>(key: S, value: &T, cache_conn: &AppCache)
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + Send + Sync + 'static,
+        S: Into<String>
+{
+    // Note: No need to spawn to add the cache, just call the function directly (Tested by Neko Nik)
+    // There differences are tiny (~0.5–1% variation), so why do all the clone and stuff
+
+    // Serialize the value to a JSON string
+    let json = serde_json::to_string(value).unwrap();
+
+    // Insert the JSON string into the cache
+    cache_conn.insert(make_key(key), json).await;
+}
