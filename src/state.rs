@@ -74,6 +74,9 @@ impl FromEnv for PgSettings {
             .expect("PG_POOL_WARM_POOL_SIZE must be a positive integer of type usize");
 
         // Warm pool size can not go above 128 (if warm pool is enabled)
+        if warm_pool_size > max_pool_size {
+            panic!("PG_POOL_WARM_POOL_SIZE must be at most PG_POOL_MAX_SIZE, it can not go more than {}", max_pool_size);
+        }
         if warm_pool && warm_pool_size > 128 {
             panic!("PG_POOL_WARM_POOL_SIZE must be at most 128, and the optimal size is 64");
         }
@@ -217,7 +220,7 @@ pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
     let app_settings: AppSettings = AppSettings::from_env();
 
     if app_settings.enable_logging {
-        env_logger::init(); // Initialize the logger to log all the logs
+        let _ = env_logger::try_init(); // Initialize the logger to log all the logs
         info!("Starting the server by initializing the application state");
     }
 
