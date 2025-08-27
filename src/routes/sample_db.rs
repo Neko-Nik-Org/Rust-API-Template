@@ -24,10 +24,10 @@ pub async fn list_notes_handler(
     pg_pool: web::Data<PgPool>,
     cache: web::Data<AppCache>
 ) -> impl Responder {
-    let cache_key = "list_notes_handler";
+    const CACHE_KEY: &str = "list_notes_handler";
 
     // If cache is present then serve from cache
-    if let Some(cached_notes) = cache.get(&make_key(cache_key)).await {
+    if let Some(cached_notes) = cache.get(&make_key(CACHE_KEY)).await {
         return HttpResponse::Ok()
             .insert_header(("X-Cache", "HIT"))
             .json(serde_json::from_str::<Vec<Note>>(&cached_notes).unwrap());
@@ -35,7 +35,7 @@ pub async fn list_notes_handler(
 
     match fetch_all_notes(&pg_pool).await {
         Ok(notes) => {
-            cache_data(cache_key, &notes, &cache).await;
+            cache_data(CACHE_KEY, &notes, &cache).await;
             HttpResponse::Ok().json(notes)
         }
         Err(_) => HttpResponse::ExpectationFailed().finish(),
