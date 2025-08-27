@@ -3,7 +3,8 @@ use actix_web::{get, post, web, HttpResponse, Responder};
 use crate::types::{AppCache, make_key};
 use deadpool_postgres::Pool as PgPool;
 
-
+// Note: No need to spawn to add the cache, just call the function directly (Tested by Neko Nik)
+// There differences are tiny (~0.5–1% variation), so why do all the clone and stuff
 
 async fn cache_data<T, S>(key: S, value: &T, cache: &AppCache)
     where
