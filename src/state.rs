@@ -34,7 +34,7 @@ fn init_pg_pool() -> PgPool {
     let max = env_var("PG_POOL_MAX")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(32);
+        .unwrap_or(64);
 
     let pool = PgPool::builder(mgr)
         .max_size(max)

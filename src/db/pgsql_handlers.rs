@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use deadpool_postgres::Pool as PgPool;
+use deadpool_postgres::{
+    PoolError as PgError,
+    Pool as PgPool
+};
 
 
 #[derive(Deserialize, Serialize)]
@@ -20,7 +23,7 @@ pub struct Record {
 
 
 // DB working state Check
-pub async fn health_check(db_pool: &PgPool) -> Result<(), deadpool_postgres::PoolError> {
+pub async fn health_check(db_pool: &PgPool) -> Result<(), PgError> {
     // Simple query to check if the database is responsive
     let client = db_pool.get().await?;
     let _ = client.query("SELECT 1", &[]).await?;
@@ -29,48 +32,53 @@ pub async fn health_check(db_pool: &PgPool) -> Result<(), deadpool_postgres::Poo
 
 
 // Sample private function to create a new note
-// async fn create_single_note(db_pool: &PgPool, note: Note) -> Result<i32, deadpool_postgres::PoolError> {
-//     let client = db_pool.get().await?;
-//     let row = client
-//         .query(
-//             r#"
-//             INSERT INTO notes (title, content)
-//             VALUES ($1, $2)
-//             RETURNING id
-//             "#,
-//             &[&note.title, &note.content],
-//         )
-//         .await?;
+async fn create_single_note(db_pool: &PgPool, note: Note) -> Result<i32, PgError> {
+    let client = db_pool.get().await?;
+    let result = client
+        .query(
+            r#"
+            INSERT INTO notes (title, content)
+            VALUES ($1, $2)
+            RETURNING id
+            "#,
+            &[&note.title, &note.content],
+        )
+        .await?;
+    Ok(result[0].get("id"))
+}
 
-//     Ok(row.get("id"))
-// }
 
+// Add few sample data in DB
+pub async fn add_new_notes(db_pool: &PgPool, values: Vec<Note>) -> Result<(), PgError> {
+    for note in values {
+        // We can do like this to purely put the query in one function and call it in another function
+        // We can even do some processing before calling the query (but all db related stuff should be in db module only)
+        create_single_note(db_pool, note).await?;
+    }
 
-// // Add few sample data in DB
-// pub async fn add_new_notes(db_pool: &PgPool, values: Vec<Note>) -> Result<(), sqlx::Error> {
-//     for note in values {
-//         // We can do like this to purely put the query in one function and call it in another function
-//         // We can even do some processing before calling the query (but all db related stuff should be in db module only)
-//         create_single_note(db_pool, note).await?;
-//     }
+    Ok(())
+}
 
-//     Ok(())
-// }
+// Fetch all notes from DB
+pub async fn fetch_all_notes(db_pool: &PgPool) -> Result<Vec<Record>, PgError> {
+    let client = db_pool.get().await?;
+    let rows = client
+        .query(
+            r#"
+            SELECT id, title, content FROM notes
+            "#,
+            &[],
+        )
+        .await?;
 
-// // Fetch all notes from DB
-// pub async fn fetch_all_notes(db_pool: &PgPool) -> Result<Vec<Record>, sqlx::Error> {
-//     let result = sqlx::query(
-//         r#"
-//         SELECT id, title, content FROM notes
-//         "#
-//     )
-//     .map(|row: sqlx::postgres::PgRow| Record {
-//         id: row.get("id"),
-//         title: row.get("title"),
-//         content: row.get("content"),
-//     })
-//     .fetch_all(db_pool)
-//     .await;
+    let notes = rows
+        .iter()
+        .map(|row| Record {
+            id: row.get("id"),
+            title: row.get("title"),
+            content: row.get("content"),
+        })
+        .collect();
 
-//     result
-// }
+    Ok(notes)
+}

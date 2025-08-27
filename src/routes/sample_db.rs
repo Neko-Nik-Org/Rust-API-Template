@@ -1,7 +1,7 @@
 use crate::db::pgsql_handlers::{Note, add_new_notes, fetch_all_notes};
 use actix_web::{get, post, web, HttpResponse, Responder};
 use crate::types::{AppCache, make_key};
-use sqlx::PgPool;
+use deadpool_postgres::Pool as PgPool;
 
 
 #[post("/create-note")]
