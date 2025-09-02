@@ -1,3 +1,4 @@
+use std::sync::mpsc::Receiver;
 use moka::future::Cache;
 use std::sync::Arc;
 
@@ -30,4 +31,23 @@ pub async fn cache_data<T, S>(key: S, value: &T, cache_conn: &AppCache)
 
     // Insert the JSON string into the cache
     cache_conn.insert(make_key(key), json).await;
+}
+
+
+/// Process the channel
+pub fn process_channel(rx: Receiver<u8>) {
+    std::thread::spawn(move || {
+        // Keep reading
+        loop {
+            match rx.recv() {
+                Ok(val) => {
+                    log::info!("Received: {}", val);
+                }
+                Err(_) => {
+                    log::warn!("Channel closed");
+                    break;
+                }
+            }
+        }
+    });
 }

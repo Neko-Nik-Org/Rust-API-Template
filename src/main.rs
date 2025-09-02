@@ -13,13 +13,14 @@ mod db;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let (pg_pool, in_mem_cache) = state::init().await;
+    let (pg_pool, in_mem_cache, tx) = state::init().await;
 
     // Start the Actix web server
     HttpServer::new(move || {
         App::new()
             .app_data(pg_pool.clone())
             .app_data(in_mem_cache.clone())
+            .app_data(tx.clone())
             .wrap(Cors::default()
                 .allow_any_origin()
                 .allowed_methods(vec!["GET", "POST"])
@@ -30,6 +31,8 @@ async fn main() -> std::io::Result<()> {
                 actix_scope("/health")
                 .service(health::api_health_check)
                 .service(health::db_health_check)
+                .service(health::cache_health_check)
+                .service(health::channel_health_check)
             )
             .service(
                 actix_scope("/sample_db")

@@ -2,11 +2,12 @@ use deadpool_postgres::{Manager, RecyclingMethod, Pool as PgPool};
 use deadpool::{managed::Timeouts, Runtime};
 use actix_web::web::Data as webData;
 use tokio_postgres::{Config, NoTls};
+use crate::types::process_channel;
 use std::env::var as env_var;
+use std::sync::mpsc::Sender;
 use super::types::AppCache;
 use std::time::Duration;
 use log::{info, warn};
-use actix_web::web;
 
 
 struct PgSettings {
@@ -215,7 +216,7 @@ fn init_cache(cache_settings: &MokaSettings) -> AppCache {
 }
 
 
-pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
+pub async fn init() -> (webData<PgPool>, webData<AppCache>, webData<Sender<u8>>) {
     // Preparing to start the server by collecting environment variables
     let app_settings: AppSettings = AppSettings::from_env();
 
@@ -233,6 +234,10 @@ pub async fn init() -> (webData<PgPool>, web::Data<AppCache>) {
     // Initialize the in-memory cache (Moka)
     let in_mem_cache = init_cache(&app_settings.cache_settings);
 
+    // Initialize the channel
+    let (tx, rx) = std::sync::mpsc::channel::<u8>();
+    process_channel(rx);
+
     // Wrap the state of the application and share it
-    (webData::new(postgres_state), webData::new(in_mem_cache))
+    (webData::new(postgres_state), webData::new(in_mem_cache), webData::new(tx))
 }
