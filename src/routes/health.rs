@@ -1,5 +1,5 @@
 use crate::{
-    database::notes::health_check as health_check_pgsql,
+    database::health_check as db_health_check_pgsql,
     models::errors::AppError
 };
 use actix_web::{get, post, web, HttpResponse};
@@ -18,7 +18,7 @@ async fn api_health_check() -> HttpResponse {
 // Database health check
 #[get("/pgsql")]
 async fn db_health_check(state: web::Data<PgPool>) -> Result<HttpResponse, AppError> {
-    health_check_pgsql(&state).await?;
+    db_health_check_pgsql(&state).await?;
     Ok(HttpResponse::Ok().body("Database is running!"))
 }
 

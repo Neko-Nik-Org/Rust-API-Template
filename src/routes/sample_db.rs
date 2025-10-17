@@ -1,15 +1,18 @@
 use actix_web::{get, post, web, HttpRequest, HttpResponse, HttpMessage};
-use crate::database::notes::{Note, add_new_notes, fetch_all_notes};
-use crate::models::errors::AppError;
+use crate::database::notes::{add_new_notes, fetch_all_notes};
 use deadpool_postgres::Pool as PgPool;
-use crate::models::user::SessionUser;
+use crate::models::{
+    user::SessionUser,
+    errors::AppError,
+    notes::Notes,
+};
 
 type ApiResp = Result<HttpResponse, AppError>;
 
 
 
 #[post("/create-note")]
-pub async fn create_note_handler(request: HttpRequest, body: web::Json<Note>, pg_pool: web::Data<PgPool>) -> ApiResp {
+pub async fn create_note_handler(request: HttpRequest, body: web::Json<Notes>, pg_pool: web::Data<PgPool>) -> ApiResp {
     // Get SessionUser from request extensions
     let ext = request.extensions();
     let session_user = ext.get::<SessionUser>().unwrap();
