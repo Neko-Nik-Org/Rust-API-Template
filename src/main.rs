@@ -10,7 +10,7 @@ mod database;
 mod models;
 mod routes;
 mod state;
-mod types;
+mod utils;
 
 
 #[actix_web::main]

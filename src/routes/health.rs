@@ -3,7 +3,7 @@ use crate::{
     models::errors::AppError
 };
 use actix_web::{get, post, web, HttpResponse};
-use crate::types::{AppCache, make_key};
+use crate::utils::{AppCache, make_key};
 use deadpool_postgres::Pool as PgPool;
 use std::sync::mpsc::Sender;
 

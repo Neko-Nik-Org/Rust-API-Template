@@ -1,5 +1,5 @@
 use actix_web::{cookie::Cookie, delete, get, post, web, HttpResponse, Responder, HttpMessage, HttpRequest};
-use crate::types::{AppCache, make_key, cache_data};
+use crate::utils::{AppCache, make_key, cache_data};
 use crate::models::user::SessionUser;
 
 

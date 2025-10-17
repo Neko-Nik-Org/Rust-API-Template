@@ -1,11 +1,10 @@
 use deadpool_postgres::{Manager, RecyclingMethod, Pool as PgPool};
+use crate::utils::{process_channel, AppCache};
 use deadpool::{managed::Timeouts, Runtime};
 use actix_web::web::Data as webData;
 use tokio_postgres::{Config, NoTls};
-use crate::types::process_channel;
 use std::env::var as env_var;
 use std::sync::mpsc::Sender;
-use super::types::AppCache;
 use std::time::Duration;
 use log::{info, warn};
 

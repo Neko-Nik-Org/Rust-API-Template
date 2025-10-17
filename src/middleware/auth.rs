@@ -12,7 +12,7 @@ use actix_web::{
 };
 use crate::{
     models::user::SessionUser,
-    types::{
+    utils::{
         AppCache,
         make_key
     }
