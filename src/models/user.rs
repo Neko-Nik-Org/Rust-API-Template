@@ -16,7 +16,7 @@ pub struct SessionUser {
 }
 
 
-// ------- Implementations -------
+// ------- Implementations ------- //
 
 
 impl fmt::Display for SessionUser {

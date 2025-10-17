@@ -22,7 +22,7 @@ struct ErrorResp {
 }
 
 
-// ------- Implementations -------
+// ------- Implementations ------- //
 
 
 impl fmt::Display for AppError {

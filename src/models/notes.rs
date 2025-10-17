@@ -12,7 +12,7 @@ pub struct Notes {
 }
 
 
-// ------- Implementations -------
+// ------- Implementations ------- //
 
 
 impl fmt::Display for Notes {
