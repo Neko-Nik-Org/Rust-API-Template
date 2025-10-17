@@ -1,14 +1,16 @@
 use actix_web::web::scope as actix_scope;
+use routes::{health, sample_db, auth};
+use actix_web::middleware::from_fn;
 use actix_web::{App, HttpServer};
 use std::env::var as env_var;
-use routes::sample_db;
 use actix_cors::Cors;
-use routes::health;
 
+mod middleware;
+mod database;
+mod models;
 mod routes;
 mod state;
 mod types;
-mod db;
 
 
 #[actix_web::main]
@@ -23,7 +25,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(tx.clone())
             .wrap(Cors::default()
                 .allow_any_origin()
-                .allowed_methods(vec!["GET", "POST"])
+                .allowed_methods(vec!["GET", "POST", "DELETE"])
                 .allow_any_header()
                 .max_age(60)
             )
@@ -36,10 +38,19 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 actix_scope("/sample_db")
+                .wrap(from_fn(middleware::auth::auth_check))
                 .service(sample_db::create_note_handler)
                 .service(sample_db::list_notes_handler)
-                .service(sample_db::create_session_handler)
-                .service(sample_db::get_session_handler)
+            )
+            .service(
+                actix_scope("/auth")
+                .service(auth::create_session_handler)
+                .service(
+                    actix_scope("")
+                    .wrap(from_fn(middleware::auth::auth_check))
+                    .service(auth::delete_session_handler)
+                    .service(auth::get_session_handler)
+                )
             )
     })
     .bind(("0.0.0.0", 8686))?

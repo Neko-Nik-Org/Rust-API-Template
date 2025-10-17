@@ -1,74 +1,36 @@
-use crate::db::pgsql_handlers::{Note, add_new_notes, fetch_all_notes};
-use actix_web::{get, post, web, HttpResponse, Responder};
-use crate::types::{AppCache, make_key, cache_data};
+use actix_web::{get, post, web, HttpRequest, HttpResponse, HttpMessage};
+use crate::database::notes::{Note, add_new_notes, fetch_all_notes};
+use crate::models::errors::AppError;
 use deadpool_postgres::Pool as PgPool;
+use crate::models::user::SessionUser;
 
-// Note: No need to spawn to add the cache, just call the function directly (Tested by Neko Nik)
-// There differences are tiny (~0.5–1% variation), so why do all the clone and stuff
+type ApiResp = Result<HttpResponse, AppError>;
+
 
 
 #[post("/create-note")]
-pub async fn create_note_handler(
-    body: web::Json<Note>,         // The request body
-    pg_pool: web::Data<PgPool>, // The state containing the DB pool
-) -> impl Responder {
-    match add_new_notes(&pg_pool, vec![body.into_inner()]).await {
-        Ok(_) => HttpResponse::Ok().json("Note created successfully!"),
-        Err(err) => HttpResponse::ExpectationFailed().json(format!("Failed: {}", err)),
-    }
+pub async fn create_note_handler(request: HttpRequest, body: web::Json<Note>, pg_pool: web::Data<PgPool>) -> ApiResp {
+    // Get SessionUser from request extensions
+    let ext = request.extensions();
+    let session_user = ext.get::<SessionUser>().unwrap();
+
+    log::trace!("{} is creating a new note.", session_user);
+
+    add_new_notes(&pg_pool, vec![body.into_inner()]).await?;
+
+    Ok(HttpResponse::Ok().json("Note created successfully!"))
 }
 
 
 #[get("/notes")]
-pub async fn list_notes_handler(
-    pg_pool: web::Data<PgPool>,
-    cache: web::Data<AppCache>
-) -> impl Responder {
-    const CACHE_KEY: &str = "list_notes_handler";
+pub async fn list_notes_handler(request: HttpRequest, pg_pool: web::Data<PgPool>) -> ApiResp {
+    // Get SessionUser from request extensions
+    let ext = request.extensions();
+    let session_user = ext.get::<SessionUser>().unwrap();
 
-    // If cache is present then serve from cache
-    if let Some(cached_notes) = cache.get(&make_key(CACHE_KEY)).await {
-        return HttpResponse::Ok()
-            .insert_header(("X-Cache", "HIT"))
-            .json(serde_json::from_str::<Vec<Note>>(&cached_notes).unwrap());
-    }
+    log::trace!("User '{}' is listing notes.", session_user.user_name);
 
-    match fetch_all_notes(&pg_pool).await {
-        Ok(notes) => {
-            cache_data(CACHE_KEY, &notes, &cache).await;
-            HttpResponse::Ok().json(notes)
-        }
-        Err(_) => HttpResponse::ExpectationFailed().finish(),
-    }
-}
+    let notes = fetch_all_notes(&pg_pool).await?;
 
-
-#[post("/create-session")]
-pub async fn create_session_handler(
-    body: String,         // The request body (For now accept anything)
-    state: web::Data<AppCache>, // The state containing the Cache
-) -> impl Responder {
-    // Generate a new session ID
-    let session_id = uuid::Uuid::new_v4().to_string();
-
-    state.insert(make_key(session_id.clone()), body).await;
-
-    HttpResponse::Ok().body(session_id)
-}
-
-
-#[get("/get-session/{session_id}")]
-pub async fn get_session_handler(
-    session_id: web::Path<String>,
-    state: web::Data<AppCache>,
-) -> impl Responder {
-    let key = make_key(session_id.clone());
-
-    if let Some(value) = state.get(&key).await {
-        HttpResponse::Ok()
-            .insert_header(("Cache-Control", "cache"))
-            .body(value)
-    } else {
-        HttpResponse::NotFound().finish()
-    }
+    Ok(HttpResponse::Ok().json(notes))
 }
