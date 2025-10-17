@@ -93,7 +93,7 @@ fn init_cache(cache_settings: &MokaSettings) -> AppCache {
 }
 
 
-pub async fn init() -> (webData<PgPool>, webData<AppCache>, webData<Sender<u8>>) {
+pub async fn initialize() -> (webData<PgPool>, webData<AppCache>, webData<Sender<u8>>) {
     // Preparing to start the server by collecting environment variables
     let app_settings: AppSettings = AppSettings::from_env();
 

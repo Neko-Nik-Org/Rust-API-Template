@@ -15,7 +15,7 @@ mod utils;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let (pg_pool, in_mem_cache, tx) = state::init().await;
+    let (pg_pool, in_mem_cache, tx) = state::initialize().await;
 
     // Start the Actix web server
     HttpServer::new(move || {
