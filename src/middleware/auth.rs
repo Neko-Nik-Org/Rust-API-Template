@@ -35,9 +35,14 @@ use crate::{
 // }
 
 
+/// Check for valid session based on Session-ID cookie and x-csrf-token header
+/// Inserts SessionUser into request extensions if valid
+/// Returns true if valid, false otherwise
 async fn session_check(req: &ServiceRequest) -> bool {
     // Look for Session-ID cookie and x-csrf-token header
-    let session_id = req.cookie("Session-ID").map(|c| c.value().to_string());
+    let session_id = req
+        .cookie("Session-ID")
+        .map(|c| c.value().to_string());
     let csrf_token = req
         .headers()
         .get("x-csrf-token")
@@ -72,6 +77,10 @@ async fn session_check(req: &ServiceRequest) -> bool {
 }
 
 
+/// Authentication middleware
+/// Checks for valid session and optionally API key
+/// Short-circuits with 401 Unauthorized if checks fail
+/// Otherwise calls the next service in the chain
 pub async fn auth_check<B>(req: ServiceRequest, next: Next<B>) -> Result<ServiceResponse, Error>
     where B: MessageBody + 'static
 {
