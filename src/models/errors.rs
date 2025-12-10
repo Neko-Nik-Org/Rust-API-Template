@@ -72,3 +72,6 @@ impl ResponseError for AppError {
             .json(ErrorResp { error: self.to_string() })
     }
 }
+
+
+impl std::error::Error for AppError {}
