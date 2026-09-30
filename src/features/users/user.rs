@@ -4,7 +4,7 @@ use std::fmt;
 
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SessionUser {
     // Session ID and CSRF token is required for session validation
     pub session_id: String,
@@ -27,6 +27,7 @@ impl fmt::Display for SessionUser {
 
 
 impl SessionUser {
+    /// Creates a new `SessionUser` with a unique session ID and CSRF token
     pub fn create(user_name: String) -> Self {
         SessionUser {
             user_name,

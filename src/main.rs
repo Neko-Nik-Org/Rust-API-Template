@@ -5,40 +5,54 @@ use actix_web::{App, HttpServer};
 use std::env::var as env_var;
 use actix_cors::Cors;
 
+
 mod middleware;
+mod messaging;
 mod database;
-mod models;
+mod features;
+mod security;
+mod errors;
 mod routes;
+mod tasks;
+mod cache;
 mod state;
 mod utils;
 
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let (pg_pool, in_mem_cache, tx) = state::initialize().await;
+    let app_state = state::initialize().await;
 
     // Start the Actix web server
     HttpServer::new(move || {
         App::new()
-            .app_data(pg_pool.clone())
-            .app_data(in_mem_cache.clone())
-            .app_data(tx.clone())
+            .app_data(app_state.clone())
             .wrap(Cors::default()
-                .allow_any_origin()
-                .allowed_methods(vec!["GET", "POST", "DELETE"])
+                // .allow_any_origin()  // Uncomment this line to allow any origin (not recommended for production)
+                .allowed_origin_fn(state::cors_allowed_origin_fn)
+                .allowed_methods(["GET", "POST", "DELETE"])
+                .supports_credentials()
                 .allow_any_header()
-                .max_age(60)
+                .max_age(420)
             )
             .service(
                 actix_scope("/health")
-                .service(health::api_health_check)
                 .service(health::db_health_check)
-                .service(health::cache_health_check)
-                .service(health::channel_health_check)
+                .service(health::api_health_check)
+                .service(health::redis_cache_health_check)
+                .service(health::in_mem_cache_health_check)
+            )
+            .service(
+                actix_scope("/internal")
+                .wrap(from_fn(middleware::key_based::auth_check))
+                .service(health::db_health_check)
+                .service(health::api_health_check)
+                .service(health::redis_cache_health_check)
+                .service(health::in_mem_cache_health_check)
             )
             .service(
                 actix_scope("/sample_db")
-                .wrap(from_fn(middleware::auth::auth_check))
+                .wrap(from_fn(middleware::user_session::auth_check))
                 .service(sample_db::create_note_handler)
                 .service(sample_db::list_notes_handler)
             )
@@ -47,7 +61,7 @@ async fn main() -> std::io::Result<()> {
                 .service(auth::create_session_handler)
                 .service(
                     actix_scope("")
-                    .wrap(from_fn(middleware::auth::auth_check))
+                    .wrap(from_fn(middleware::user_session::auth_check))
                     .service(auth::delete_session_handler)
                     .service(auth::get_session_handler)
                 )

@@ -1,120 +1,96 @@
-use crate::models::initial::{AppSettings, MokaSettings, PgSettings};
-use deadpool_postgres::{Manager, RecyclingMethod, Pool as PgPool};
-use crate::utils::{process_channel, AppCache};
-use deadpool::{managed::Timeouts, Runtime};
+use crate::utils::initial::{ApiSettings, AppSettings, RmqSettings};
+use crate::cache::moka_cache::{AppCache, moka_builder};
+use crate::database::pool::{init_pg_pool, warm_pool};
+use crate::cache::redis_cache::init_redis;
+use crate::tasks::start_background_jobs;
+use redis::aio::MultiplexedConnection;
+use deadpool_postgres::Pool as PgPool;
 use actix_web::web::Data as webData;
-use tokio_postgres::{Config, NoTls};
-use std::sync::mpsc::Sender;
+use crate::features::notes::Notes;
 use std::time::Duration;
-use log::{info, warn};
+use std::sync::LazyLock;
 
 
 
-async fn warm_pool(pool: &PgPool, pg: &PgSettings) {
-    // Warm pool to avoid first-hit latency
-    if !pg.warm_pool {
-        // Return early if warm pool is not enabled
-        return;
+pub struct AppState {
+    pub pg_pool: PgPool,
+    pub redis_cache: MultiplexedConnection,
+    pub in_mem_cache: InMemCache,
+}
+
+
+pub struct InMemCache {
+    pub string_based: AppCache<String>,
+    pub number_based: AppCache<u64>,
+    pub notes_based: AppCache<Notes>,
+}
+
+
+pub static API_SETTINGS: LazyLock<ApiSettings> = LazyLock::new(|| {
+    ApiSettings::from_env()
+});
+
+
+pub static RMQ_SETTINGS: LazyLock<RmqSettings> = LazyLock::new(|| {
+    RmqSettings::from_env()
+});
+
+
+fn init_in_mem_cache(cache_size: u64, expiration_time: Duration) -> InMemCache {
+    // Build the in-memory cache (Moka)
+    // Note: You can configure each type of cache separately if needed,
+    // this shown below is only an example
+    InMemCache {
+        string_based: moka_builder(cache_size, expiration_time),
+        number_based: moka_builder(cache_size, expiration_time),
+        notes_based: moka_builder(cache_size, expiration_time)
+    }
+}
+
+
+/// Determines if the given origin is allowed based on the API settings
+pub fn cors_allowed_origin_fn(origin: &actix_web::http::header::HeaderValue, _: &actix_web::dev::RequestHead) -> bool {
+    let origin_str = origin.to_str().unwrap_or("");
+    let allowed_origins = &API_SETTINGS.allowed_origins;
+
+    if allowed_origins.iter().any(|item| item == "*") {
+        return true;
     }
 
-    let warm_n = pg.max_pool_size.min(pg.warm_pool_size);
-    let mut ok = 0;
-
-    for _ in 0..warm_n {
-        match pool.get().await {
-            Ok(client) => {
-                let _ = client.simple_query("SELECT 1").await;
-                ok += 1;
-            }
-            Err(_) => {
-                warn!("Pool warm-up: failed to get a connection");
-            }
-        }
-    }
-
-    // Log the warm-up results
-    if ok == 0 {
-        warn!("Pool warm-up failed, all attempts to get a connection were unsuccessful: {warm_n}");
-    } else {
-        info!("Pool warm-up: {ok} conns warmed up out of {warm_n}. Success rate: {:.2}%", ok as f64 / warm_n as f64 * 100.0);
-    }
+    allowed_origins.iter().any(|item| item == origin_str)
 }
 
 
-fn build_pg_config(settings: &PgSettings) -> Config {
-    // Initialize the Postgres configuration
-    let mut cfg: Config = settings.url.parse::<Config>().expect("invalid POSTGRES_DB_URL");
-    cfg.application_name("rust-api");
-    cfg.connect_timeout(Duration::from_secs(settings.conn_timeout));
-
-    cfg
-}
-
-
-fn init_pg_pool(pg_settings: &PgSettings) -> PgPool {
-    // Get the Postgres base configuration
-    let cfg: Config = build_pg_config(pg_settings);
-    let mgr = Manager::from_config(
-        cfg,
-        NoTls,
-        deadpool_postgres::ManagerConfig {
-            recycling_method: RecyclingMethod::Fast,
-        },
-    );
-
-    let pool = PgPool::builder(mgr)
-        .max_size(pg_settings.max_pool_size)
-        .runtime(Runtime::Tokio1)
-        .timeouts(Timeouts {
-            // how long to wait for an idle connection from the pool
-            wait: Some(Duration::from_secs(pg_settings.wait_timeout)),
-            // how long to spend creating a new connection (if pool can grow)
-            create: Some(Duration::from_secs(pg_settings.new_connection_timeout)),
-            // how long to spend recycling/validating a connection
-            recycle: Some(Duration::from_secs(pg_settings.recycle_timeout)),
-        })
-        .build()
-        .expect("failed to build pg pool");
-
-    info!("Postgres pool initialized (max_pool_size={})", pg_settings.max_pool_size);
-    pool
-}
-
-
-fn init_cache(cache_settings: &MokaSettings) -> AppCache {
-    // Build the AppCache
-    let cache: AppCache = AppCache::builder()
-        .max_capacity(cache_settings.cache_size)
-        .time_to_live(cache_settings.expiration_time)
-        .build();
-
-    info!("In-memory cache initialized (max_capacity={})", cache_settings.cache_size);
-    cache
-}
-
-
-pub async fn initialize() -> (webData<PgPool>, webData<AppCache>, webData<Sender<u8>>) {
+/// Initializes the application state, including the Postgres pool, Redis cache, and in-memory cache
+pub async fn initialize() -> webData<AppState> {
     // Preparing to start the server by collecting environment variables
     let app_settings: AppSettings = AppSettings::from_env();
 
+    // Initialize the application settings from environment variables
     if app_settings.enable_logging {
         let _ = env_logger::try_init(); // Initialize the logger to log all the logs
-        info!("Starting the server by initializing the application state");
+        log::info!("Starting the server by initializing the application state");
     }
 
     // Initialize the Postgres client
-    let postgres_state = init_pg_pool(&app_settings.pg_settings);
+    let pg_pool = init_pg_pool(&app_settings.pg_settings);
 
-    // Warm up the connection pool if enabled
-    warm_pool(&postgres_state, &app_settings.pg_settings).await;
+    // Warm the Postgres pool based on the warm pool settings
+    warm_pool(&pg_pool, &app_settings.pg_settings).await;
 
-    // Initialize the in-memory cache (Moka)
-    let in_mem_cache = init_cache(&app_settings.cache_settings);
+    // Initialize the in-memory cache (Moka)    [You can configure for each type of cache separately also, this is just an example]
+    let in_mem_cache = init_in_mem_cache(app_settings.cache_settings.cache_size, app_settings.cache_settings.expiration_time);
 
-    // Initialize the channel
-    let (tx, rx) = std::sync::mpsc::channel::<u8>();
-    process_channel(rx);
+    // Initialize the Redis cache
+    let redis_cache = init_redis(&app_settings.redis_url).await;
+
+    // Start background jobs
+    start_background_jobs(pg_pool.clone());
 
     // Wrap the state of the application and share it
-    (webData::new(postgres_state), webData::new(in_mem_cache), webData::new(tx))
+    webData::new(AppState {
+        pg_pool,
+        redis_cache,
+        in_mem_cache,
+    })
 }

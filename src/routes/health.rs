@@ -1,11 +1,16 @@
-use crate::{
-    database::health_check as db_health_check_pgsql,
-    models::errors::AppError
-};
-use actix_web::{get, post, web, HttpResponse};
-use crate::utils::{AppCache, make_key};
-use deadpool_postgres::Pool as PgPool;
-use std::sync::mpsc::Sender;
+use crate::database::health_check::health_check;
+use crate::cache::{redis_cache, moka_cache};
+use crate::errors::{ApiResponse, AppError};
+use actix_web::{get, web, HttpResponse};
+use crate::state::AppState;
+use std::sync::Arc;
+
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct RedisCacheHealthCheck {
+    rank: i32,
+    user_id: i32,
+}
 
 
 // Health check endpoint
@@ -17,34 +22,53 @@ async fn api_health_check() -> HttpResponse {
 
 // Database health check
 #[get("/pgsql")]
-async fn db_health_check(state: web::Data<PgPool>) -> Result<HttpResponse, AppError> {
-    db_health_check_pgsql(&state).await?;
+async fn db_health_check(state: web::Data<AppState>) -> ApiResponse {
+    health_check(&state.pg_pool).await?;
     Ok(HttpResponse::Ok().body("Database is running!"))
 }
 
 
 // Cache health check
-#[get("/cache")]
-async fn cache_health_check(cache: web::Data<AppCache>) -> HttpResponse {
+#[get("/cache/redis")]
+async fn redis_cache_health_check(state: web::Data<AppState>) -> ApiResponse {
+    let cache = &state.redis_cache;
+
     const CACHE_KEY: &str = "health_check";
-    const CACHE_VALUE: &str = "Cache is running!";
-    let key = make_key(CACHE_KEY);
+    let cache_value = RedisCacheHealthCheck {
+        rank: 1,
+        user_id: 1,
+    };
+    
+    // Insert the cache value into Redis
+    redis_cache::set_redis_cache(cache, CACHE_KEY, &cache_value, 60).await?;
 
-    cache.insert(key, CACHE_VALUE.to_string()).await;
-
-    if let Some(cached_value) = cache.get(&make_key(CACHE_KEY)).await {
-        if cached_value == CACHE_VALUE {
-            return HttpResponse::Ok().body(cached_value);
-        }
+    let cached_value: Option<RedisCacheHealthCheck> = redis_cache::get_redis_cache(cache, CACHE_KEY).await?;
+    if cached_value.is_none() {
+        return Err(AppError::PreconditionFailed("Redis cache health check failed!".into()));
     }
-    HttpResponse::PreconditionFailed().body("Cache health check failed!")
+
+    Ok(HttpResponse::Ok().body("Redis cache is running!"))
 }
 
 
-// Channel Health check
-#[post("/channel")]
-async fn channel_health_check(state: web::Data<Sender<u8>>) -> HttpResponse {
-    // Send a 7 int to the channel
-    let _ = state.send(7);
-    HttpResponse::Ok().body("Channel health check initiated!")
+// Cache health check
+#[get("/cache/in-mem")]
+async fn in_mem_cache_health_check(state: web::Data<AppState>) -> ApiResponse {
+    let cache = &state.in_mem_cache.number_based;
+
+    const CACHE_KEY: &str = "health_check";
+    let cache_value: u64 = 1;
+
+    let cache_value: Arc<u64> = Arc::new(cache_value);
+
+    // Insert the cache value into the in-memory cache
+    moka_cache::cache_data(cache, CACHE_KEY, cache_value).await;
+
+    let cached_value: Option<Arc<u64>> = moka_cache::get_cached_data(cache, CACHE_KEY).await;
+
+    if cached_value.is_none() {
+        return Err(AppError::PreconditionFailed("In-memory cache health check failed!".into()));
+    }
+
+    Ok(HttpResponse::Ok().body("In-memory cache is running!"))
 }

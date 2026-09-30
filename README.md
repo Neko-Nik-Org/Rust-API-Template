@@ -34,4 +34,4 @@ Please make sure to follow the existing code style and add tests for any new fea
 
 ## License
 
-Rust-API Template is released under the [MIT License](https://github.com/Neko-Nik/Rust-API-Template/blob/main/LICENSE). You are free to use, modify, and distribute this template for any purpose.
+Rust-API Template is released under the [MIT License](https://github.com/Neko-Nik-Org/Rust-API-Template/blob/main/LICENSE). You are free to use, modify, and distribute this template for any purpose.
